@@ -1,0 +1,82 @@
+# Compiled Object files
+*.o
+*.obj
+*.ko
+*.elf
+
+# Compiled executables
+server/server
+client/client
+*.exe
+*.out
+*.app
+
+# Libraries
+*.a
+*.lib
+*.so
+*.dylib
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Core dumps
+core
+core.*
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Database configuration (sensitive)
+database.conf
+*.env
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Build directories
+build/
+dist/
+bin/
+
+# Dependency directories (if using)
+lib/
+libs/
+
+# System files
+Thumbs.db
+desktop.ini
+
+# Test files and coverage
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Documentation build
+doc/_build/
+docs/_build/
+
+# Package files
+*.tar.gz
+*.zip
+*.rar
