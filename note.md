@@ -38,3 +38,29 @@ psql -U postgres -d file_share_db -h localhost
 # Lưu script trên vào file create_schema.sql
 # Sau đó chạy:
 psql -U file_sharing_user -d file_sharing_db -h localhost -f create_schema.sql
+
+## Chay server
+# Cài đặt thư viện
+sudo apt-get install libpq-dev libjson-c-dev libssl-dev uuid-dev
+
+# Tạo database
+psql -U postgres -c "CREATE DATABASE fileshare;"
+psql -U postgres -d fileshare -f schema.sql
+
+# Biên dịch
+cd server
+make
+
+# Chạy
+./server
+
+## Chay client
+# Cài đặt thư viện
+sudo apt-get install libjson-c-dev
+
+# Biên dịch
+cd client
+make
+
+# Chạy
+./client
