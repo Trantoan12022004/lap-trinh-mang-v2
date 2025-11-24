@@ -7,7 +7,7 @@
 static PGconn *conn = NULL;
 
 int init_database() {
-    const char *conninfo = "host=localhost dbname=fileshare user=postgres password=your_password";
+    const char *conninfo = "host=localhost dbname=file_share_db user=postgres password=120204";
     
     conn = PQconnectdb(conninfo);
     
