@@ -8,10 +8,10 @@ OBJS = client.o
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-    $(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
 client.o: client.c
-    $(CC) $(CFLAGS) -c client.c
+	$(CC) $(CFLAGS) -c client.c
 
 clean:
-    rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS)
