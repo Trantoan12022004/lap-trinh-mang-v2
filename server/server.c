@@ -53,6 +53,12 @@ void *handle_client(void *arg) {
             handle_login(client_sock, request, client_ip);
         } else if (strcmp(command, "LOGOUT") == 0) {
             handle_logout(client_sock, request);
+        } else if (strcmp(command, "VERIFY_SESSION") == 0) {
+            handle_verify_session(client_sock, request);
+        } else if (strcmp(command, "UPDATE_PROFILE") == 0) {
+            handle_update_profile(client_sock, request);
+        } else if (strcmp(command, "CHANGE_PASSWORD") == 0) {
+            handle_change_password(client_sock, request);
         } else {
             send_error_response(client_sock, STATUS_BAD_REQUEST, "ERROR_INVALID_COMMAND", "Unknown command");
         }

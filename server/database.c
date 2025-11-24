@@ -119,3 +119,113 @@ int db_update_last_login(int user_id) {
     
     return success;
 }
+
+UserInfo* db_verify_session(const char *session_token) {
+    if (!conn) return NULL;
+    
+    const char *paramValues[1] = {session_token};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT s.user_id, u.username, u.role, s.expires_at FROM sessions s "
+        "JOIN users u ON s.user_id = u.user_id "
+        "WHERE s.session_token = $1 AND s.is_active = TRUE AND s.expires_at > CURRENT_TIMESTAMP",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    UserInfo *user = (UserInfo*)malloc(sizeof(UserInfo));
+    user->user_id = atoi(PQgetvalue(res, 0, 0));
+    strncpy(user->username, PQgetvalue(res, 0, 1), 50);
+    user->username[50] = '\0';
+    strncpy(user->role, PQgetvalue(res, 0, 2), 20);
+    user->role[20] = '\0';
+    
+    PQclear(res);
+    return user;
+}
+
+int db_invalidate_session(const char *session_token) {
+    if (!conn) return 0;
+    
+    const char *paramValues[1] = {session_token};
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE sessions SET is_active = FALSE WHERE session_token = $1",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    
+    return success;
+}
+
+int db_update_profile(int user_id, const char *email, const char *full_name) {
+    if (!conn) return 0;
+    
+    char user_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    
+    const char *paramValues[3] = {user_id_str, email, full_name};
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE users SET email = $2, full_name = $3 WHERE user_id = $1",
+        3, NULL, paramValues, NULL, NULL, 0);
+    
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    
+    return success;
+}
+
+UserInfo* db_get_user_by_id(int user_id) {
+    if (!conn) return NULL;
+    
+    char user_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    
+    const char *paramValues[1] = {user_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT user_id, username, role, email, full_name FROM users WHERE user_id = $1",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    UserInfo *user = (UserInfo*)malloc(sizeof(UserInfo));
+    user->user_id = atoi(PQgetvalue(res, 0, 0));
+    strncpy(user->username, PQgetvalue(res, 0, 1), 50);
+    user->username[50] = '\0';
+    strncpy(user->role, PQgetvalue(res, 0, 2), 20);
+    user->role[20] = '\0';
+    strncpy(user->email, PQgetvalue(res, 0, 3), 100);
+    user->email[100] = '\0';
+    strncpy(user->full_name, PQgetvalue(res, 0, 4), 100);
+    user->full_name[100] = '\0';
+    
+    PQclear(res);
+    return user;
+}
+
+int db_change_password(int user_id, const char *new_password_hash) {
+    if (!conn) return 0;
+    
+    char user_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    
+    const char *paramValues[2] = {user_id_str, new_password_hash};
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE users SET password_hash = $2 WHERE user_id = $1",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    
+    return success;
+}
