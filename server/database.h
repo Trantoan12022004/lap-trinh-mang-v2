@@ -61,6 +61,15 @@ typedef struct {
     char created_at[64];
 } InvitationInfo;
 
+typedef struct {
+    int directory_id;
+    char directory_name[256];
+    char directory_path[512];
+    int group_id;
+    char created_by[51];
+    char created_at[64];
+} DirectoryInfo;
+
 int init_database();
 void cleanup_database();
 int db_create_user(const char *username, const char *password_hash, const char *email, const char *full_name);
@@ -90,5 +99,11 @@ int db_respond_invitation(int invitation_id, const char *action);
 int db_leave_group(int user_id, int group_id);
 int db_remove_member(int group_id, int target_user_id);
 UserInfo* db_get_user_by_username(const char *username);
+int db_create_directory(int group_id, const char *directory_name, const char *parent_path, int created_by_user_id);
+DirectoryInfo* db_get_directory_by_id(int directory_id);
+int db_rename_directory(int directory_id, const char *new_name);
+int db_delete_directory(int directory_id, int *deleted_files, int *deleted_subdirs);
+int db_copy_directory(int directory_id, const char *destination_path, int user_id);
+int db_move_directory(int directory_id, const char *destination_path, int *affected_files, int *affected_subdirs);
 
 #endif

@@ -10,6 +10,7 @@
 #include "auth_handler.h"
 #include "permission_handler.h"
 #include "group_handler.h"
+#include "file_handler.h"
 #include "database.h"
 
 typedef struct {
@@ -87,6 +88,16 @@ void *handle_client(void *arg) {
             handle_leave_group(client_sock, request);
         } else if (strcmp(command, "REMOVE_MEMBER") == 0) {
             handle_remove_member(client_sock, request);
+        } else if (strcmp(command, "CREATE_DIRECTORY") == 0) {
+            handle_create_directory(client_sock, request);
+        } else if (strcmp(command, "RENAME_DIRECTORY") == 0) {
+            handle_rename_directory(client_sock, request);
+        } else if (strcmp(command, "DELETE_DIRECTORY") == 0) {
+            handle_delete_directory(client_sock, request);
+        } else if (strcmp(command, "COPY_DIRECTORY") == 0) {
+            handle_copy_directory(client_sock, request);
+        } else if (strcmp(command, "MOVE_DIRECTORY") == 0) {
+            handle_move_directory(client_sock, request);
         } else {
             send_error_response(client_sock, STATUS_BAD_REQUEST, "ERROR_INVALID_COMMAND", "Unknown command");
         }
@@ -124,7 +135,7 @@ int main() {
     
     // Bind
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("172.11.14.114");
+    server_addr.sin_addr.s_addr = inet_addr("172.18.38.70");
     server_addr.sin_port = htons(PORT);
     
     if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -140,7 +151,7 @@ int main() {
         return 1;
     }
     
-    printf("Server listening on 172.11.14.114:%d\n", PORT);
+    printf("Server listening on 172.18.38.70:%d\n", PORT);
     
     // Accept connections
     while (1) {

@@ -986,3 +986,203 @@ int db_remove_member(int group_id, int target_user_id) {
     
     return 0;
 }
+
+// Directory operations
+int db_create_directory(int group_id, const char *directory_name, const char *parent_path, int created_by_user_id) {
+    if (!conn || !directory_name || !parent_path) return -1;
+    
+    char group_id_str[32], user_id_str[32];
+    sprintf(group_id_str, "%d", group_id);
+    sprintf(user_id_str, "%d", created_by_user_id);
+    
+    // Build full directory path
+    char directory_path[512];
+    if (parent_path[strlen(parent_path) - 1] == '/') {
+        sprintf(directory_path, "%s%s", parent_path, directory_name);
+    } else {
+        sprintf(directory_path, "%s/%s", parent_path, directory_name);
+    }
+    
+    const char *paramValues[4] = {directory_name, directory_path, group_id_str, user_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "INSERT INTO directories (directory_name, directory_path, group_id, created_by) "
+        "VALUES ($1, $2, $3, $4) RETURNING directory_id",
+        4, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT directory failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    int directory_id = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    return directory_id;
+}
+
+DirectoryInfo* db_get_directory_by_id(int directory_id) {
+    if (!conn) return NULL;
+    
+    char directory_id_str[32];
+    sprintf(directory_id_str, "%d", directory_id);
+    
+    const char *paramValues[1] = {directory_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT d.directory_id, d.directory_name, d.directory_path, d.group_id, u.username, "
+        "TO_CHAR(d.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') "
+        "FROM directories d "
+        "LEFT JOIN users u ON d.created_by = u.user_id "
+        "WHERE d.directory_id = $1",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    DirectoryInfo *dir = (DirectoryInfo*)malloc(sizeof(DirectoryInfo));
+    dir->directory_id = atoi(PQgetvalue(res, 0, 0));
+    strncpy(dir->directory_name, PQgetvalue(res, 0, 1), 255);
+    strncpy(dir->directory_path, PQgetvalue(res, 0, 2), 511);
+    dir->group_id = atoi(PQgetvalue(res, 0, 3));
+    strncpy(dir->created_by, PQgetvalue(res, 0, 4), 50);
+    strncpy(dir->created_at, PQgetvalue(res, 0, 5), 63);
+    
+    PQclear(res);
+    return dir;
+}
+
+int db_rename_directory(int directory_id, const char *new_name) {
+    if (!conn || !new_name) return -1;
+    
+    DirectoryInfo *old_dir = db_get_directory_by_id(directory_id);
+    if (!old_dir) return -1;
+    
+    char parent_path[512];
+    strcpy(parent_path, old_dir->directory_path);
+    char *last_slash = strrchr(parent_path, '/');
+    if (last_slash) *last_slash = '\0';
+    else parent_path[0] = '\0';
+    
+    char new_path[512];
+    if (strlen(parent_path) > 0) sprintf(new_path, "%s/%s", parent_path, new_name);
+    else strcpy(new_path, new_name);
+    
+    char directory_id_str[32];
+    sprintf(directory_id_str, "%d", directory_id);
+    const char *paramValues[3] = {new_name, new_path, directory_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE directories SET directory_name = $1, directory_path = $2 WHERE directory_id = $3",
+        3, NULL, paramValues, NULL, NULL, 0);
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    
+    if (success) {
+        char old_path_pattern[520];
+        sprintf(old_path_pattern, "%s/%%", old_dir->directory_path);
+        res = PQexecParams(conn,
+            "UPDATE directories SET directory_path = $1 || SUBSTRING(directory_path FROM $2) "
+            "WHERE directory_path LIKE $3",
+            3, NULL, (const char*[]){new_path, "LENGTH($2) + 1", old_path_pattern}, NULL, NULL, 0);
+        PQclear(res);
+        
+        res = PQexecParams(conn,
+            "UPDATE files SET file_path = $1 || SUBSTRING(file_path FROM $2) WHERE file_path LIKE $3",
+            3, NULL, (const char*[]){new_path, "LENGTH($2) + 1", old_path_pattern}, NULL, NULL, 0);
+        PQclear(res);
+    }
+    
+    free(old_dir);
+    return success ? 0 : -1;
+}
+
+int db_delete_directory(int directory_id, int *deleted_files, int *deleted_subdirs) {
+    if (!conn) return -1;
+    
+    DirectoryInfo *dir = db_get_directory_by_id(directory_id);
+    if (!dir) return -1;
+    
+    char directory_id_str[32];
+    sprintf(directory_id_str, "%d", directory_id);
+    
+    char path_pattern[520];
+    sprintf(path_pattern, "%s/%%", dir->directory_path);
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT COUNT(*) FROM files WHERE file_path LIKE $1 OR file_path = $2",
+        2, NULL, (const char*[]){path_pattern, dir->directory_path}, NULL, NULL, 0);
+    if (deleted_files) *deleted_files = (PQresultStatus(res) == PGRES_TUPLES_OK) ? atoi(PQgetvalue(res, 0, 0)) : 0;
+    PQclear(res);
+    
+    res = PQexecParams(conn,
+        "DELETE FROM files WHERE file_path LIKE $1 OR file_path = $2",
+        2, NULL, (const char*[]){path_pattern, dir->directory_path}, NULL, NULL, 0);
+    PQclear(res);
+    
+    res = PQexecParams(conn,
+        "SELECT COUNT(*) FROM directories WHERE directory_path LIKE $1",
+        1, NULL, (const char*[]){path_pattern}, NULL, NULL, 0);
+    if (deleted_subdirs) *deleted_subdirs = (PQresultStatus(res) == PGRES_TUPLES_OK) ? atoi(PQgetvalue(res, 0, 0)) : 0;
+    PQclear(res);
+    
+    res = PQexecParams(conn,
+        "DELETE FROM directories WHERE directory_path LIKE $1 OR directory_id = $2",
+        2, NULL, (const char*[]){path_pattern, directory_id_str}, NULL, NULL, 0);
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    
+    free(dir);
+    return success ? 0 : -1;
+}
+
+int db_copy_directory(int directory_id, const char *destination_path, int user_id) {
+    if (!conn || !destination_path) return -1;
+    
+    DirectoryInfo *source = db_get_directory_by_id(directory_id);
+    if (!source) return -1;
+    
+    int new_dir_id = db_create_directory(source->group_id, source->directory_name, destination_path, user_id);
+    free(source);
+    return new_dir_id;
+}
+
+int db_move_directory(int directory_id, const char *destination_path, int *affected_files, int *affected_subdirs) {
+    if (!conn || !destination_path) return -1;
+    
+    DirectoryInfo *dir = db_get_directory_by_id(directory_id);
+    if (!dir) return -1;
+    
+    char new_path[512];
+    if (destination_path[strlen(destination_path) - 1] == '/') sprintf(new_path, "%s%s", destination_path, dir->directory_name);
+    else sprintf(new_path, "%s/%s", destination_path, dir->directory_name);
+    
+    char directory_id_str[32];
+    sprintf(directory_id_str, "%d", directory_id);
+    char old_path_pattern[520];
+    sprintf(old_path_pattern, "%s/%%", dir->directory_path);
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE directories SET directory_path = $1 WHERE directory_id = $2",
+        2, NULL, (const char*[]){new_path, directory_id_str}, NULL, NULL, 0);
+    PQclear(res);
+    
+    res = PQexecParams(conn,
+        "SELECT COUNT(*) FROM directories WHERE directory_path LIKE $1",
+        1, NULL, (const char*[]){old_path_pattern}, NULL, NULL, 0);
+    if (affected_subdirs) *affected_subdirs = (PQresultStatus(res) == PGRES_TUPLES_OK) ? atoi(PQgetvalue(res, 0, 0)) : 0;
+    PQclear(res);
+    
+    res = PQexecParams(conn,
+        "SELECT COUNT(*) FROM files WHERE file_path LIKE $1",
+        1, NULL, (const char*[]){old_path_pattern}, NULL, NULL, 0);
+    if (affected_files) *affected_files = (PQresultStatus(res) == PGRES_TUPLES_OK) ? atoi(PQgetvalue(res, 0, 0)) : 0;
+    PQclear(res);
+    
+    int success = 0;
+    free(dir);
+    return success;
+}

@@ -16,7 +16,7 @@ int connect_to_server() {
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("172.11.14.114");
+    server_addr.sin_addr.s_addr = inet_addr("172.18.38.70");
     
     if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("Connection failed");
@@ -647,6 +647,175 @@ void send_remove_member_request(int sock) {
     printf("\nResponse:\n%s\n", buffer);
 }
 
+void send_create_directory_request(int sock) {
+    char token[MAX_TOKEN], directory_name[256], parent_path[512];
+    int group_id;
+    
+    printf("\n=== CREATE DIRECTORY ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    printf("Directory name: ");
+    scanf("%s", directory_name);
+    printf("Parent path: ");
+    scanf("%s", parent_path);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("CREATE_DIRECTORY"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(data, "directory_name", json_object_new_string(directory_name));
+    json_object_object_add(data, "parent_path", json_object_new_string(parent_path));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_rename_directory_request(int sock) {
+    char token[MAX_TOKEN], new_name[256];
+    int directory_id;
+    
+    printf("\n=== RENAME DIRECTORY (Admin Only) ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Directory ID: ");
+    scanf("%d", &directory_id);
+    printf("New name: ");
+    scanf("%s", new_name);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("RENAME_DIRECTORY"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "directory_id", json_object_new_int(directory_id));
+    json_object_object_add(data, "new_name", json_object_new_string(new_name));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_delete_directory_request(int sock) {
+    char token[MAX_TOKEN], recursive_input[10];
+    int directory_id, recursive;
+    
+    printf("\n=== DELETE DIRECTORY (Admin Only) ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Directory ID: ");
+    scanf("%d", &directory_id);
+    printf("Recursive (true/false): ");
+    scanf("%s", recursive_input);
+    recursive = (strcmp(recursive_input, "true") == 0 || strcmp(recursive_input, "1") == 0);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("DELETE_DIRECTORY"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "directory_id", json_object_new_int(directory_id));
+    json_object_object_add(data, "recursive", json_object_new_boolean(recursive));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_copy_directory_request(int sock) {
+    char token[MAX_TOKEN], destination_path[512];
+    int directory_id;
+    
+    printf("\n=== COPY DIRECTORY (Admin Only) ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Directory ID: ");
+    scanf("%d", &directory_id);
+    printf("Destination path: ");
+    scanf("%s", destination_path);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("COPY_DIRECTORY"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "directory_id", json_object_new_int(directory_id));
+    json_object_object_add(data, "destination_path", json_object_new_string(destination_path));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_move_directory_request(int sock) {
+    char token[MAX_TOKEN], destination_path[512];
+    int directory_id;
+    
+    printf("\n=== MOVE DIRECTORY (Admin Only) ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Directory ID: ");
+    scanf("%d", &directory_id);
+    printf("Destination path: ");
+    scanf("%s", destination_path);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("MOVE_DIRECTORY"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "directory_id", json_object_new_int(directory_id));
+    json_object_object_add(data, "destination_path", json_object_new_string(destination_path));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
 int main() {
     int sock = connect_to_server();
     if (sock < 0) {
@@ -675,7 +844,12 @@ int main() {
         printf("17. Respond to Invitation\n");
         printf("18. Leave Group\n");
         printf("19. Remove Member (Admin)\n");
-        printf("20. Exit\n");
+        printf("20. Create Directory\n");
+        printf("21. Rename Directory (Admin)\n");
+        printf("22. Delete Directory (Admin)\n");
+        printf("23. Copy Directory (Admin)\n");
+        printf("24. Move Directory (Admin)\n");
+        printf("25. Exit\n");
         printf("Choice: ");
         scanf("%d", &choice);
         
@@ -738,6 +912,21 @@ int main() {
                 send_remove_member_request(sock);
                 break;
             case 20:
+                send_create_directory_request(sock);
+                break;
+            case 21:
+                send_rename_directory_request(sock);
+                break;
+            case 22:
+                send_delete_directory_request(sock);
+                break;
+            case 23:
+                send_copy_directory_request(sock);
+                break;
+            case 24:
+                send_move_directory_request(sock);
+                break;
+            case 25:
                 close(sock);
                 return 0;
             default:
