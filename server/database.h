@@ -39,6 +39,16 @@ typedef struct {
     char joined_at[64];
 } MemberInfo;
 
+typedef struct {
+    int request_id;
+    int group_id;
+    int user_id;
+    char username[51];
+    char full_name[101];
+    char status[21];
+    char created_at[64];
+} JoinRequestInfo;
+
 int init_database();
 void cleanup_database();
 int db_create_user(const char *username, const char *password_hash, const char *email, const char *full_name);
@@ -57,5 +67,9 @@ int db_create_group(int owner_id, const char *group_name, const char *descriptio
 int db_get_user_groups(int user_id, GroupInfo ***groups);
 int db_is_group_member(int user_id, int group_id);
 int db_get_group_members(int group_id, MemberInfo ***members);
+int db_request_join_group(int user_id, int group_id);
+int db_get_join_requests(int group_id, JoinRequestInfo ***requests);
+int db_approve_join_request(int request_id, int reviewer_id, const char *action);
+JoinRequestInfo* db_get_join_request_by_id(int request_id);
 
 #endif

@@ -391,6 +391,102 @@ void send_list_group_members_request(int sock) {
     printf("\nResponse:\n%s\n", buffer);
 }
 
+void send_request_join_group_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id;
+    
+    printf("\n=== REQUEST JOIN GROUP ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("REQUEST_JOIN_GROUP"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_list_join_requests_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id;
+    
+    printf("\n=== LIST JOIN REQUESTS ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("LIST_JOIN_REQUESTS"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_approve_join_request_request(int sock) {
+    char token[MAX_TOKEN], action[20];
+    int request_id;
+    
+    printf("\n=== APPROVE/REJECT JOIN REQUEST ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Request ID: ");
+    scanf("%d", &request_id);
+    printf("Action (approve/reject): ");
+    scanf("%s", action);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("APPROVE_JOIN_REQUEST"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "request_id", json_object_new_int(request_id));
+    json_object_object_add(data, "action", json_object_new_string(action));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
 int main() {
     int sock = connect_to_server();
     if (sock < 0) {
@@ -411,7 +507,10 @@ int main() {
         printf("9. Create Group\n");
         printf("10. List My Groups\n");
         printf("11. List Group Members\n");
-        printf("12. Exit\n");
+        printf("12. Request Join Group\n");
+        printf("13. List Join Requests (Admin)\n");
+        printf("14. Approve/Reject Join Request\n");
+        printf("15. Exit\n");
         printf("Choice: ");
         scanf("%d", &choice);
         
@@ -450,6 +549,15 @@ int main() {
                 send_list_group_members_request(sock);
                 break;
             case 12:
+                send_request_join_group_request(sock);
+                break;
+            case 13:
+                send_list_join_requests_request(sock);
+                break;
+            case 14:
+                send_approve_join_request_request(sock);
+                break;
+            case 15:
                 close(sock);
                 return 0;
             default:

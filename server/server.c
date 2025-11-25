@@ -71,6 +71,12 @@ void *handle_client(void *arg) {
             handle_list_my_groups(client_sock, request);
         } else if (strcmp(command, "LIST_GROUP_MEMBERS") == 0) {
             handle_list_group_members(client_sock, request);
+        } else if (strcmp(command, "REQUEST_JOIN_GROUP") == 0) {
+            handle_request_join_group(client_sock, request);
+        } else if (strcmp(command, "LIST_JOIN_REQUESTS") == 0) {
+            handle_list_join_requests(client_sock, request);
+        } else if (strcmp(command, "APPROVE_JOIN_REQUEST") == 0) {
+            handle_approve_join_request(client_sock, request);
         } else {
             send_error_response(client_sock, STATUS_BAD_REQUEST, "ERROR_INVALID_COMMAND", "Unknown command");
         }

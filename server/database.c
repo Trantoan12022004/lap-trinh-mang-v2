@@ -505,3 +505,191 @@ int db_get_group_members(int group_id, MemberInfo ***members) {
     PQclear(res);
     return count;
 }
+
+int db_request_join_group(int user_id, int group_id) {
+    if (!conn) return -1;
+    
+    char user_id_str[32], group_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[2] = {group_id_str, user_id_str};
+    
+    // Check if already a member
+    PGresult *res = PQexecParams(conn,
+        "SELECT member_id FROM group_members WHERE group_id = $1 AND user_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        PQclear(res);
+        return -2; // Already a member or request exists
+    }
+    PQclear(res);
+    
+    // Check if request already exists
+    res = PQexecParams(conn,
+        "SELECT request_id FROM join_requests WHERE group_id = $1 AND user_id = $2 AND status = 'pending'",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        PQclear(res);
+        return -3; // Request already pending
+    }
+    PQclear(res);
+    
+    // Create join request
+    res = PQexecParams(conn,
+        "INSERT INTO join_requests (group_id, user_id, status) VALUES ($1, $2, 'pending') RETURNING request_id",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT join_request failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    int request_id = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    return request_id;
+}
+
+int db_get_join_requests(int group_id, JoinRequestInfo ***requests) {
+    if (!conn) return 0;
+    
+    char group_id_str[32];
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[1] = {group_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT jr.request_id, jr.group_id, jr.user_id, u.username, u.full_name, jr.status, jr.created_at "
+        "FROM join_requests jr "
+        "JOIN users u ON jr.user_id = u.user_id "
+        "WHERE jr.group_id = $1 AND jr.status = 'pending' "
+        "ORDER BY jr.created_at DESC",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        PQclear(res);
+        return 0;
+    }
+    
+    *requests = (JoinRequestInfo**)malloc(count * sizeof(JoinRequestInfo*));
+    
+    for (int i = 0; i < count; i++) {
+        (*requests)[i] = (JoinRequestInfo*)malloc(sizeof(JoinRequestInfo));
+        (*requests)[i]->request_id = atoi(PQgetvalue(res, i, 0));
+        (*requests)[i]->group_id = atoi(PQgetvalue(res, i, 1));
+        (*requests)[i]->user_id = atoi(PQgetvalue(res, i, 2));
+        strncpy((*requests)[i]->username, PQgetvalue(res, i, 3), 50);
+        (*requests)[i]->username[50] = '\0';
+        strncpy((*requests)[i]->full_name, PQgetvalue(res, i, 4), 100);
+        (*requests)[i]->full_name[100] = '\0';
+        strncpy((*requests)[i]->status, PQgetvalue(res, i, 5), 20);
+        (*requests)[i]->status[20] = '\0';
+        strncpy((*requests)[i]->created_at, PQgetvalue(res, i, 6), 63);
+        (*requests)[i]->created_at[63] = '\0';
+    }
+    
+    PQclear(res);
+    return count;
+}
+
+JoinRequestInfo* db_get_join_request_by_id(int request_id) {
+    if (!conn) return NULL;
+    
+    char request_id_str[32];
+    sprintf(request_id_str, "%d", request_id);
+    
+    const char *paramValues[1] = {request_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT jr.request_id, jr.group_id, jr.user_id, u.username, u.full_name, jr.status, jr.created_at "
+        "FROM join_requests jr "
+        "JOIN users u ON jr.user_id = u.user_id "
+        "WHERE jr.request_id = $1",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    JoinRequestInfo *info = (JoinRequestInfo*)malloc(sizeof(JoinRequestInfo));
+    info->request_id = atoi(PQgetvalue(res, 0, 0));
+    info->group_id = atoi(PQgetvalue(res, 0, 1));
+    info->user_id = atoi(PQgetvalue(res, 0, 2));
+    strncpy(info->username, PQgetvalue(res, 0, 3), 50);
+    info->username[50] = '\0';
+    strncpy(info->full_name, PQgetvalue(res, 0, 4), 100);
+    info->full_name[100] = '\0';
+    strncpy(info->status, PQgetvalue(res, 0, 5), 20);
+    info->status[20] = '\0';
+    strncpy(info->created_at, PQgetvalue(res, 0, 6), 63);
+    info->created_at[63] = '\0';
+    
+    PQclear(res);
+    return info;
+}
+
+int db_approve_join_request(int request_id, int reviewer_id, const char *action) {
+    if (!conn) return -1;
+    
+    char request_id_str[32], reviewer_id_str[32];
+    sprintf(request_id_str, "%d", request_id);
+    sprintf(reviewer_id_str, "%d", reviewer_id);
+    
+    // Get request info
+    JoinRequestInfo *info = db_get_join_request_by_id(request_id);
+    if (!info) return -1;
+    
+    int group_id = info->group_id;
+    int user_id = info->user_id;
+    
+    // Update request status
+    const char *status = (strcmp(action, "approve") == 0) ? "approved" : "rejected";
+    const char *paramValues[3] = {status, reviewer_id_str, request_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE join_requests SET status = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2 WHERE request_id = $3",
+        3, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "UPDATE join_request failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        free(info);
+        return -1;
+    }
+    PQclear(res);
+    
+    // If approved, add to group_members
+    if (strcmp(action, "approve") == 0) {
+        char group_id_str[32], user_id_str[32];
+        sprintf(group_id_str, "%d", group_id);
+        sprintf(user_id_str, "%d", user_id);
+        
+        const char *memberParams[2] = {group_id_str, user_id_str};
+        
+        res = PQexecParams(conn,
+            "INSERT INTO group_members (group_id, user_id, role, status) VALUES ($1, $2, 'member', 'approved')",
+            2, NULL, memberParams, NULL, NULL, 0);
+        PQclear(res);
+        
+        // Create default permissions
+        res = PQexecParams(conn,
+            "INSERT INTO permissions (group_id, user_id, can_read, can_write, can_delete, can_manage) "
+            "VALUES ($1, $2, TRUE, FALSE, FALSE, FALSE)",
+            2, NULL, memberParams, NULL, NULL, 0);
+        PQclear(res);
+    }
+    
+    free(info);
+    return 0;
+}
