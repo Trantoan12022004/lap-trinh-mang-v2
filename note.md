@@ -78,7 +78,7 @@ make
 
 # Cài đặt thư viện
 
-git c
+sudo apt-get install libjson-c-dev
 
 # Biên dịch
 

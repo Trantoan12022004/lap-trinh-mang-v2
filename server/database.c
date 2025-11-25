@@ -229,3 +229,279 @@ int db_change_password(int user_id, const char *new_password_hash) {
     
     return success;
 }
+
+PermissionInfo* db_get_permissions(int user_id, int group_id) {
+    if (!conn) return NULL;
+    
+    char user_id_str[32], group_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[2] = {user_id_str, group_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT permission_id, user_id, group_id, can_read, can_write, can_delete, can_manage "
+        "FROM permissions WHERE user_id = $1 AND group_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    PermissionInfo *perm = (PermissionInfo*)malloc(sizeof(PermissionInfo));
+    perm->permission_id = atoi(PQgetvalue(res, 0, 0));
+    perm->user_id = atoi(PQgetvalue(res, 0, 1));
+    perm->group_id = atoi(PQgetvalue(res, 0, 2));
+    perm->can_read = strcmp(PQgetvalue(res, 0, 3), "t") == 0 ? 1 : 0;
+    perm->can_write = strcmp(PQgetvalue(res, 0, 4), "t") == 0 ? 1 : 0;
+    perm->can_delete = strcmp(PQgetvalue(res, 0, 5), "t") == 0 ? 1 : 0;
+    perm->can_manage = strcmp(PQgetvalue(res, 0, 6), "t") == 0 ? 1 : 0;
+    
+    PQclear(res);
+    return perm;
+}
+
+int db_update_permissions(int user_id, int group_id, int can_read, int can_write, int can_delete, int can_manage) {
+    if (!conn) return 0;
+    
+    char user_id_str[32], group_id_str[32];
+    char can_read_str[10], can_write_str[10], can_delete_str[10], can_manage_str[10];
+    
+    sprintf(user_id_str, "%d", user_id);
+    sprintf(group_id_str, "%d", group_id);
+    sprintf(can_read_str, "%s", can_read ? "true" : "false");
+    sprintf(can_write_str, "%s", can_write ? "true" : "false");
+    sprintf(can_delete_str, "%s", can_delete ? "true" : "false");
+    sprintf(can_manage_str, "%s", can_manage ? "true" : "false");
+    
+    const char *paramValues[6] = {user_id_str, group_id_str, can_read_str, can_write_str, can_delete_str, can_manage_str};
+    
+    // Check if permission exists
+    PGresult *check_res = PQexecParams(conn,
+        "SELECT permission_id FROM permissions WHERE user_id = $1 AND group_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    int exists = (PQresultStatus(check_res) == PGRES_TUPLES_OK && PQntuples(check_res) > 0);
+    PQclear(check_res);
+    
+    PGresult *res;
+    if (exists) {
+        // Update existing permission
+        res = PQexecParams(conn,
+            "UPDATE permissions SET can_read = $3, can_write = $4, can_delete = $5, can_manage = $6 "
+            "WHERE user_id = $1 AND group_id = $2",
+            6, NULL, paramValues, NULL, NULL, 0);
+    } else {
+        // Insert new permission
+        res = PQexecParams(conn,
+            "INSERT INTO permissions (user_id, group_id, can_read, can_write, can_delete, can_manage) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
+            6, NULL, paramValues, NULL, NULL, 0);
+    }
+    
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    
+    return success;
+}
+
+int db_is_group_admin(int user_id, int group_id) {
+    if (!conn) return 0;
+    
+    char user_id_str[32], group_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[2] = {user_id_str, group_id_str};
+    
+    // Check if user is owner of the group
+    PGresult *res = PQexecParams(conn,
+        "SELECT group_id FROM groups WHERE group_id = $2 AND owner_id = $1",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    int is_owner = (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0);
+    PQclear(res);
+    
+    if (is_owner) return 1;
+    
+    // Check if user is admin member of the group
+    res = PQexecParams(conn,
+        "SELECT member_id FROM group_members WHERE user_id = $1 AND group_id = $2 AND role = 'admin' AND status = 'approved'",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    int is_admin = (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0);
+    PQclear(res);
+    
+    return is_admin;
+}
+
+int db_create_group(int owner_id, const char *group_name, const char *description) {
+    if (!conn) return -1;
+    
+    char owner_id_str[32];
+    sprintf(owner_id_str, "%d", owner_id);
+    
+    const char *paramValues[3] = {group_name, description ? description : "", owner_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "INSERT INTO groups (group_name, description, owner_id) VALUES ($1, $2, $3) RETURNING group_id",
+        3, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT group failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    int group_id = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    // Add owner as admin member
+    char group_id_str[32];
+    sprintf(group_id_str, "%d", group_id);
+    const char *memberParams[2] = {group_id_str, owner_id_str};
+    
+    res = PQexecParams(conn,
+        "INSERT INTO group_members (group_id, user_id, role, status) VALUES ($1, $2, 'admin', 'approved')",
+        2, NULL, memberParams, NULL, NULL, 0);
+    PQclear(res);
+    
+    // Create full permissions for owner (admin)
+    const char *permParams[2] = {group_id_str, owner_id_str};
+    res = PQexecParams(conn,
+        "INSERT INTO permissions (group_id, user_id, can_read, can_write, can_delete, can_manage) "
+        "VALUES ($1, $2, TRUE, TRUE, TRUE, TRUE)",
+        2, NULL, permParams, NULL, NULL, 0);
+    PQclear(res);
+    
+    return group_id;
+}
+
+int db_get_user_groups(int user_id, GroupInfo ***groups) {
+    if (!conn) return 0;
+    
+    char user_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    
+    const char *paramValues[1] = {user_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT g.group_id, g.group_name, g.description, "
+        "CASE WHEN g.owner_id = $1 THEN 'admin' ELSE COALESCE(gm.role, 'member') END as role, "
+        "(SELECT COUNT(*) FROM group_members WHERE group_id = g.group_id AND status = 'approved') as member_count, "
+        "g.created_at "
+        "FROM groups g "
+        "LEFT JOIN group_members gm ON g.group_id = gm.group_id AND gm.user_id = $1 "
+        "WHERE g.owner_id = $1 OR (gm.user_id = $1 AND gm.status = 'approved') "
+        "ORDER BY g.created_at DESC",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        PQclear(res);
+        return 0;
+    }
+    
+    *groups = (GroupInfo**)malloc(count * sizeof(GroupInfo*));
+    
+    for (int i = 0; i < count; i++) {
+        (*groups)[i] = (GroupInfo*)malloc(sizeof(GroupInfo));
+        (*groups)[i]->group_id = atoi(PQgetvalue(res, i, 0));
+        strncpy((*groups)[i]->group_name, PQgetvalue(res, i, 1), 100);
+        (*groups)[i]->group_name[100] = '\0';
+        strncpy((*groups)[i]->description, PQgetvalue(res, i, 2), 255);
+        (*groups)[i]->description[255] = '\0';
+        strncpy((*groups)[i]->role, PQgetvalue(res, i, 3), 20);
+        (*groups)[i]->role[20] = '\0';
+        (*groups)[i]->member_count = atoi(PQgetvalue(res, i, 4));
+        strncpy((*groups)[i]->created_at, PQgetvalue(res, i, 5), 63);
+        (*groups)[i]->created_at[63] = '\0';
+    }
+    
+    PQclear(res);
+    return count;
+}
+
+int db_is_group_member(int user_id, int group_id) {
+    if (!conn) return 0;
+    
+    char user_id_str[32], group_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[2] = {user_id_str, group_id_str};
+    
+    // Check if user is owner
+    PGresult *res = PQexecParams(conn,
+        "SELECT group_id FROM groups WHERE group_id = $2 AND owner_id = $1",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    int is_owner = (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0);
+    PQclear(res);
+    
+    if (is_owner) return 1;
+    
+    // Check if user is approved member
+    res = PQexecParams(conn,
+        "SELECT member_id FROM group_members WHERE user_id = $1 AND group_id = $2 AND status = 'approved'",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    int is_member = (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0);
+    PQclear(res);
+    
+    return is_member;
+}
+
+int db_get_group_members(int group_id, MemberInfo ***members) {
+    if (!conn) return 0;
+    
+    char group_id_str[32];
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[1] = {group_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT u.user_id, u.username, u.full_name, gm.role, gm.status, gm.joined_at "
+        "FROM group_members gm "
+        "JOIN users u ON gm.user_id = u.user_id "
+        "WHERE gm.group_id = $1 "
+        "ORDER BY gm.joined_at ASC",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        PQclear(res);
+        return 0;
+    }
+    
+    *members = (MemberInfo**)malloc(count * sizeof(MemberInfo*));
+    
+    for (int i = 0; i < count; i++) {
+        (*members)[i] = (MemberInfo*)malloc(sizeof(MemberInfo));
+        (*members)[i]->user_id = atoi(PQgetvalue(res, i, 0));
+        strncpy((*members)[i]->username, PQgetvalue(res, i, 1), 50);
+        (*members)[i]->username[50] = '\0';
+        strncpy((*members)[i]->full_name, PQgetvalue(res, i, 2), 100);
+        (*members)[i]->full_name[100] = '\0';
+        strncpy((*members)[i]->role, PQgetvalue(res, i, 3), 20);
+        (*members)[i]->role[20] = '\0';
+        strncpy((*members)[i]->status, PQgetvalue(res, i, 4), 20);
+        (*members)[i]->status[20] = '\0';
+        strncpy((*members)[i]->joined_at, PQgetvalue(res, i, 5), 63);
+        (*members)[i]->joined_at[63] = '\0';
+    }
+    
+    PQclear(res);
+    return count;
+}

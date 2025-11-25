@@ -3,7 +3,7 @@ CFLAGS = -Wall -pthread -I/usr/include/postgresql
 LDFLAGS = -lpq -ljson-c -lssl -lcrypto -luuid
 
 TARGET = server
-OBJS = server.o auth_handler.o database.o
+OBJS = server.o auth_handler.o permission_handler.o group_handler.o database.o
 
 all: $(TARGET)
 
@@ -15,6 +15,12 @@ server.o: server.c
 
 auth_handler.o: auth_handler.c
 	$(CC) $(CFLAGS) -c auth_handler.c
+
+permission_handler.o: permission_handler.c
+	$(CC) $(CFLAGS) -c permission_handler.c
+
+group_handler.o: group_handler.c
+	$(CC) $(CFLAGS) -c group_handler.c
 
 database.o: database.c
 	$(CC) $(CFLAGS) -c database.c

@@ -8,6 +8,8 @@
 #include <json-c/json.h>
 #include "../common/protocol.h"
 #include "auth_handler.h"
+#include "permission_handler.h"
+#include "group_handler.h"
 #include "database.h"
 
 typedef struct {
@@ -59,6 +61,16 @@ void *handle_client(void *arg) {
             handle_update_profile(client_sock, request);
         } else if (strcmp(command, "CHANGE_PASSWORD") == 0) {
             handle_change_password(client_sock, request);
+        } else if (strcmp(command, "GET_PERMISSIONS") == 0) {
+            handle_get_permissions(client_sock, request);
+        } else if (strcmp(command, "UPDATE_PERMISSIONS") == 0) {
+            handle_update_permissions(client_sock, request);
+        } else if (strcmp(command, "CREATE_GROUP") == 0) {
+            handle_create_group(client_sock, request);
+        } else if (strcmp(command, "LIST_MY_GROUPS") == 0) {
+            handle_list_my_groups(client_sock, request);
+        } else if (strcmp(command, "LIST_GROUP_MEMBERS") == 0) {
+            handle_list_group_members(client_sock, request);
         } else {
             send_error_response(client_sock, STATUS_BAD_REQUEST, "ERROR_INVALID_COMMAND", "Unknown command");
         }
@@ -96,7 +108,7 @@ int main() {
     
     // Bind
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("192.168.102.30");
+    server_addr.sin_addr.s_addr = inet_addr("172.11.14.114");
     server_addr.sin_port = htons(PORT);
     
     if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -112,7 +124,7 @@ int main() {
         return 1;
     }
     
-    printf("Server listening on 192.168.102.30:%d\n", PORT);
+    printf("Server listening on 172.11.14.114:%d\n", PORT);
     
     // Accept connections
     while (1) {

@@ -16,7 +16,7 @@ int connect_to_server() {
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("192.168.102.30");
+    server_addr.sin_addr.s_addr = inet_addr("172.11.14.114");
     
     if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("Connection failed");
@@ -219,6 +219,178 @@ void send_change_password_request(int sock) {
     printf("\nResponse:\n%s\n", buffer);
 }
 
+void send_get_permissions_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id;
+    
+    printf("\n=== GET PERMISSIONS ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("GET_PERMISSIONS"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_update_permissions_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id, target_user_id;
+    int can_read, can_write, can_delete, can_manage;
+    
+    printf("\n=== UPDATE PERMISSIONS ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    printf("Target User ID: ");
+    scanf("%d", &target_user_id);
+    printf("Can read (1/0): ");
+    scanf("%d", &can_read);
+    printf("Can write (1/0): ");
+    scanf("%d", &can_write);
+    printf("Can delete (1/0): ");
+    scanf("%d", &can_delete);
+    printf("Can manage (1/0): ");
+    scanf("%d", &can_manage);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("UPDATE_PERMISSIONS"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(data, "target_user_id", json_object_new_int(target_user_id));
+    json_object_object_add(data, "can_read", json_object_new_boolean(can_read));
+    json_object_object_add(data, "can_write", json_object_new_boolean(can_write));
+    json_object_object_add(data, "can_delete", json_object_new_boolean(can_delete));
+    json_object_object_add(data, "can_manage", json_object_new_boolean(can_manage));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_create_group_request(int sock) {
+    char token[MAX_TOKEN], group_name[101], description[256];
+    
+    printf("\n=== CREATE GROUP ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group name: ");
+    getchar(); // consume newline
+    fgets(group_name, 101, stdin);
+    group_name[strcspn(group_name, "\n")] = 0;
+    printf("Description: ");
+    fgets(description, 256, stdin);
+    description[strcspn(description, "\n")] = 0;
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("CREATE_GROUP"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_name", json_object_new_string(group_name));
+    json_object_object_add(data, "description", json_object_new_string(description));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_list_my_groups_request(int sock) {
+    char token[MAX_TOKEN];
+    
+    printf("\n=== LIST MY GROUPS ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("LIST_MY_GROUPS"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_list_group_members_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id;
+    
+    printf("\n=== LIST GROUP MEMBERS ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("LIST_GROUP_MEMBERS"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
 int main() {
     int sock = connect_to_server();
     if (sock < 0) {
@@ -234,7 +406,12 @@ int main() {
         printf("4. Verify Session\n");
         printf("5. Update Profile\n");
         printf("6. Change Password\n");
-        printf("7. Exit\n");
+        printf("7. Get Permissions\n");
+        printf("8. Update Permissions\n");
+        printf("9. Create Group\n");
+        printf("10. List My Groups\n");
+        printf("11. List Group Members\n");
+        printf("12. Exit\n");
         printf("Choice: ");
         scanf("%d", &choice);
         
@@ -258,6 +435,21 @@ int main() {
                 send_change_password_request(sock);
                 break;
             case 7:
+                send_get_permissions_request(sock);
+                break;
+            case 8:
+                send_update_permissions_request(sock);
+                break;
+            case 9:
+                send_create_group_request(sock);
+                break;
+            case 10:
+                send_list_my_groups_request(sock);
+                break;
+            case 11:
+                send_list_group_members_request(sock);
+                break;
+            case 12:
                 close(sock);
                 return 0;
             default:

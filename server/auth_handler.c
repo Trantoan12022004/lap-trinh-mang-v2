@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/socket.h>
 #include <openssl/sha.h>
 #include <uuid/uuid.h>
 #include <json-c/json.h>

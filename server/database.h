@@ -11,6 +11,34 @@ typedef struct {
     char full_name[101];
 } UserInfo;
 
+typedef struct {
+    int permission_id;
+    int user_id;
+    int group_id;
+    int can_read;
+    int can_write;
+    int can_delete;
+    int can_manage;
+} PermissionInfo;
+
+typedef struct {
+    int group_id;
+    char group_name[101];
+    char description[256];
+    char role[21];
+    int member_count;
+    char created_at[64];
+} GroupInfo;
+
+typedef struct {
+    int user_id;
+    char username[51];
+    char full_name[101];
+    char role[21];
+    char status[21];
+    char joined_at[64];
+} MemberInfo;
+
 int init_database();
 void cleanup_database();
 int db_create_user(const char *username, const char *password_hash, const char *email, const char *full_name);
@@ -22,5 +50,12 @@ int db_invalidate_session(const char *session_token);
 int db_update_profile(int user_id, const char *email, const char *full_name);
 UserInfo* db_get_user_by_id(int user_id);
 int db_change_password(int user_id, const char *new_password_hash);
+PermissionInfo* db_get_permissions(int user_id, int group_id);
+int db_update_permissions(int user_id, int group_id, int can_read, int can_write, int can_delete, int can_manage);
+int db_is_group_admin(int user_id, int group_id);
+int db_create_group(int owner_id, const char *group_name, const char *description);
+int db_get_user_groups(int user_id, GroupInfo ***groups);
+int db_is_group_member(int user_id, int group_id);
+int db_get_group_members(int group_id, MemberInfo ***members);
 
 #endif
