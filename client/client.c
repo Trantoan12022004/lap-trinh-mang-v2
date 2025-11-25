@@ -487,6 +487,166 @@ void send_approve_join_request_request(int sock) {
     printf("\nResponse:\n%s\n", buffer);
 }
 
+void send_invite_to_group_request(int sock) {
+    char token[MAX_TOKEN], invitee_username[MAX_USERNAME];
+    int group_id;
+    
+    printf("\n=== INVITE TO GROUP ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    printf("Invitee username: ");
+    scanf("%s", invitee_username);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("INVITE_TO_GROUP"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(data, "invitee_username", json_object_new_string(invitee_username));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_list_my_invitations_request(int sock) {
+    char token[MAX_TOKEN];
+    
+    printf("\n=== LIST MY INVITATIONS ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("LIST_MY_INVITATIONS"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_respond_invitation_request(int sock) {
+    char token[MAX_TOKEN], action[20];
+    int invitation_id;
+    
+    printf("\n=== RESPOND TO INVITATION ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Invitation ID: ");
+    scanf("%d", &invitation_id);
+    printf("Action (accept/reject): ");
+    scanf("%s", action);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("RESPOND_INVITATION"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "invitation_id", json_object_new_int(invitation_id));
+    json_object_object_add(data, "action", json_object_new_string(action));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_leave_group_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id;
+    
+    printf("\n=== LEAVE GROUP ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("LEAVE_GROUP"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
+void send_remove_member_request(int sock) {
+    char token[MAX_TOKEN];
+    int group_id, target_user_id;
+    
+    printf("\n=== REMOVE MEMBER ===\n");
+    printf("Session token: ");
+    scanf("%s", token);
+    printf("Group ID: ");
+    scanf("%d", &group_id);
+    printf("Target User ID: ");
+    scanf("%d", &target_user_id);
+    
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "command", json_object_new_string("REMOVE_MEMBER"));
+    
+    struct json_object *data = json_object_new_object();
+    json_object_object_add(data, "session_token", json_object_new_string(token));
+    json_object_object_add(data, "group_id", json_object_new_int(group_id));
+    json_object_object_add(data, "target_user_id", json_object_new_int(target_user_id));
+    json_object_object_add(request, "data", data);
+    
+    const char *json_str = json_object_to_json_string(request);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    json_object_put(request);
+    
+    // Receive response
+    char buffer[BUFFER_SIZE];
+    int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    buffer[bytes] = '\0';
+    
+    printf("\nResponse:\n%s\n", buffer);
+}
+
 int main() {
     int sock = connect_to_server();
     if (sock < 0) {
@@ -510,7 +670,12 @@ int main() {
         printf("12. Request Join Group\n");
         printf("13. List Join Requests (Admin)\n");
         printf("14. Approve/Reject Join Request\n");
-        printf("15. Exit\n");
+        printf("15. Invite to Group\n");
+        printf("16. List My Invitations\n");
+        printf("17. Respond to Invitation\n");
+        printf("18. Leave Group\n");
+        printf("19. Remove Member (Admin)\n");
+        printf("20. Exit\n");
         printf("Choice: ");
         scanf("%d", &choice);
         
@@ -558,6 +723,21 @@ int main() {
                 send_approve_join_request_request(sock);
                 break;
             case 15:
+                send_invite_to_group_request(sock);
+                break;
+            case 16:
+                send_list_my_invitations_request(sock);
+                break;
+            case 17:
+                send_respond_invitation_request(sock);
+                break;
+            case 18:
+                send_leave_group_request(sock);
+                break;
+            case 19:
+                send_remove_member_request(sock);
+                break;
+            case 20:
                 close(sock);
                 return 0;
             default:

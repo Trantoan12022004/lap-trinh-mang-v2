@@ -9,5 +9,10 @@ void handle_list_group_members(int sock, struct json_object *request);
 void handle_request_join_group(int sock, struct json_object *request);
 void handle_list_join_requests(int sock, struct json_object *request);
 void handle_approve_join_request(int sock, struct json_object *request);
+void handle_invite_to_group(int sock, struct json_object *request);
+void handle_list_my_invitations(int sock, struct json_object *request);
+void handle_respond_invitation(int sock, struct json_object *request);
+void handle_leave_group(int sock, struct json_object *request);
+void handle_remove_member(int sock, struct json_object *request);
 
 #endif

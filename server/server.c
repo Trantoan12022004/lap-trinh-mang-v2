@@ -77,6 +77,16 @@ void *handle_client(void *arg) {
             handle_list_join_requests(client_sock, request);
         } else if (strcmp(command, "APPROVE_JOIN_REQUEST") == 0) {
             handle_approve_join_request(client_sock, request);
+        } else if (strcmp(command, "INVITE_TO_GROUP") == 0) {
+            handle_invite_to_group(client_sock, request);
+        } else if (strcmp(command, "LIST_MY_INVITATIONS") == 0) {
+            handle_list_my_invitations(client_sock, request);
+        } else if (strcmp(command, "RESPOND_INVITATION") == 0) {
+            handle_respond_invitation(client_sock, request);
+        } else if (strcmp(command, "LEAVE_GROUP") == 0) {
+            handle_leave_group(client_sock, request);
+        } else if (strcmp(command, "REMOVE_MEMBER") == 0) {
+            handle_remove_member(client_sock, request);
         } else {
             send_error_response(client_sock, STATUS_BAD_REQUEST, "ERROR_INVALID_COMMAND", "Unknown command");
         }

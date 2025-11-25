@@ -693,3 +693,296 @@ int db_approve_join_request(int request_id, int reviewer_id, const char *action)
     free(info);
     return 0;
 }
+
+UserInfo* db_get_user_by_username(const char *username) {
+    if (!conn) return NULL;
+    
+    const char *paramValues[1] = {username};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT user_id, username, role, email, full_name FROM users WHERE username = $1",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    UserInfo *user = (UserInfo*)malloc(sizeof(UserInfo));
+    user->user_id = atoi(PQgetvalue(res, 0, 0));
+    strncpy(user->username, PQgetvalue(res, 0, 1), 50);
+    user->username[50] = '\0';
+    strncpy(user->role, PQgetvalue(res, 0, 2), 20);
+    user->role[20] = '\0';
+    strncpy(user->email, PQgetvalue(res, 0, 3), 100);
+    user->email[100] = '\0';
+    strncpy(user->full_name, PQgetvalue(res, 0, 4), 100);
+    user->full_name[100] = '\0';
+    
+    PQclear(res);
+    return user;
+}
+
+int db_invite_to_group(int inviter_id, int group_id, const char *invitee_username) {
+    if (!conn) return -1;
+    
+    // Get invitee user_id
+    UserInfo *invitee = db_get_user_by_username(invitee_username);
+    if (!invitee) return -2; // User not found
+    
+    int invitee_id = invitee->user_id;
+    free(invitee);
+    
+    char inviter_id_str[32], group_id_str[32], invitee_id_str[32];
+    sprintf(inviter_id_str, "%d", inviter_id);
+    sprintf(group_id_str, "%d", group_id);
+    sprintf(invitee_id_str, "%d", invitee_id);
+    
+    // Check if already a member
+    const char *checkParams[2] = {group_id_str, invitee_id_str};
+    PGresult *res = PQexecParams(conn,
+        "SELECT member_id FROM group_members WHERE group_id = $1 AND user_id = $2",
+        2, NULL, checkParams, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        PQclear(res);
+        return -3; // Already a member
+    }
+    PQclear(res);
+    
+    // Check if invitation already exists
+    res = PQexecParams(conn,
+        "SELECT invitation_id FROM group_invitations WHERE group_id = $1 AND invitee_id = $2 AND status = 'pending'",
+        2, NULL, checkParams, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        PQclear(res);
+        return -4; // Invitation already pending
+    }
+    PQclear(res);
+    
+    // Create invitation
+    const char *paramValues[3] = {group_id_str, inviter_id_str, invitee_id_str};
+    res = PQexecParams(conn,
+        "INSERT INTO group_invitations (group_id, inviter_id, invitee_id, status) VALUES ($1, $2, $3, 'pending') RETURNING invitation_id",
+        3, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT invitation failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    int invitation_id = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    return invitation_id;
+}
+
+int db_get_user_invitations(int user_id, InvitationInfo ***invitations) {
+    if (!conn) return 0;
+    
+    char user_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    
+    const char *paramValues[1] = {user_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT gi.invitation_id, gi.group_id, g.group_name, gi.inviter_id, "
+        "u.username, u.full_name, gi.invitee_id, gi.status, gi.created_at "
+        "FROM group_invitations gi "
+        "JOIN groups g ON gi.group_id = g.group_id "
+        "JOIN users u ON gi.inviter_id = u.user_id "
+        "WHERE gi.invitee_id = $1 AND gi.status = 'pending' "
+        "ORDER BY gi.created_at DESC",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        PQclear(res);
+        return 0;
+    }
+    
+    *invitations = (InvitationInfo**)malloc(count * sizeof(InvitationInfo*));
+    
+    for (int i = 0; i < count; i++) {
+        (*invitations)[i] = (InvitationInfo*)malloc(sizeof(InvitationInfo));
+        (*invitations)[i]->invitation_id = atoi(PQgetvalue(res, i, 0));
+        (*invitations)[i]->group_id = atoi(PQgetvalue(res, i, 1));
+        strncpy((*invitations)[i]->group_name, PQgetvalue(res, i, 2), 100);
+        (*invitations)[i]->group_name[100] = '\0';
+        (*invitations)[i]->inviter_id = atoi(PQgetvalue(res, i, 3));
+        strncpy((*invitations)[i]->inviter_username, PQgetvalue(res, i, 4), 50);
+        (*invitations)[i]->inviter_username[50] = '\0';
+        strncpy((*invitations)[i]->inviter_name, PQgetvalue(res, i, 5), 100);
+        (*invitations)[i]->inviter_name[100] = '\0';
+        (*invitations)[i]->invitee_id = atoi(PQgetvalue(res, i, 6));
+        strncpy((*invitations)[i]->status, PQgetvalue(res, i, 7), 20);
+        (*invitations)[i]->status[20] = '\0';
+        strncpy((*invitations)[i]->created_at, PQgetvalue(res, i, 8), 63);
+        (*invitations)[i]->created_at[63] = '\0';
+    }
+    
+    PQclear(res);
+    return count;
+}
+
+InvitationInfo* db_get_invitation_by_id(int invitation_id) {
+    if (!conn) return NULL;
+    
+    char invitation_id_str[32];
+    sprintf(invitation_id_str, "%d", invitation_id);
+    
+    const char *paramValues[1] = {invitation_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "SELECT gi.invitation_id, gi.group_id, g.group_name, gi.inviter_id, "
+        "u.username, u.full_name, gi.invitee_id, gi.status, gi.created_at "
+        "FROM group_invitations gi "
+        "JOIN groups g ON gi.group_id = g.group_id "
+        "JOIN users u ON gi.inviter_id = u.user_id "
+        "WHERE gi.invitation_id = $1",
+        1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    InvitationInfo *info = (InvitationInfo*)malloc(sizeof(InvitationInfo));
+    info->invitation_id = atoi(PQgetvalue(res, 0, 0));
+    info->group_id = atoi(PQgetvalue(res, 0, 1));
+    strncpy(info->group_name, PQgetvalue(res, 0, 2), 100);
+    info->group_name[100] = '\0';
+    info->inviter_id = atoi(PQgetvalue(res, 0, 3));
+    strncpy(info->inviter_username, PQgetvalue(res, 0, 4), 50);
+    info->inviter_username[50] = '\0';
+    strncpy(info->inviter_name, PQgetvalue(res, 0, 5), 100);
+    info->inviter_name[100] = '\0';
+    info->invitee_id = atoi(PQgetvalue(res, 0, 6));
+    strncpy(info->status, PQgetvalue(res, 0, 7), 20);
+    info->status[20] = '\0';
+    strncpy(info->created_at, PQgetvalue(res, 0, 8), 63);
+    info->created_at[63] = '\0';
+    
+    PQclear(res);
+    return info;
+}
+
+int db_respond_invitation(int invitation_id, const char *action) {
+    if (!conn) return -1;
+    
+    // Get invitation info
+    InvitationInfo *info = db_get_invitation_by_id(invitation_id);
+    if (!info) return -1;
+    
+    int group_id = info->group_id;
+    int user_id = info->invitee_id;
+    
+    // Update invitation status
+    char invitation_id_str[32];
+    sprintf(invitation_id_str, "%d", invitation_id);
+    const char *status = (strcmp(action, "accept") == 0) ? "accepted" : "rejected";
+    const char *paramValues[2] = {status, invitation_id_str};
+    
+    PGresult *res = PQexecParams(conn,
+        "UPDATE group_invitations SET status = $1 WHERE invitation_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "UPDATE invitation failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        free(info);
+        return -1;
+    }
+    PQclear(res);
+    
+    // If accepted, add to group_members
+    if (strcmp(action, "accept") == 0) {
+        char group_id_str[32], user_id_str[32];
+        sprintf(group_id_str, "%d", group_id);
+        sprintf(user_id_str, "%d", user_id);
+        
+        const char *memberParams[2] = {group_id_str, user_id_str};
+        
+        res = PQexecParams(conn,
+            "INSERT INTO group_members (group_id, user_id, role, status) VALUES ($1, $2, 'member', 'approved')",
+            2, NULL, memberParams, NULL, NULL, 0);
+        PQclear(res);
+        
+        // Create default permissions
+        res = PQexecParams(conn,
+            "INSERT INTO permissions (group_id, user_id, can_read, can_write, can_delete, can_manage) "
+            "VALUES ($1, $2, TRUE, FALSE, FALSE, FALSE)",
+            2, NULL, memberParams, NULL, NULL, 0);
+        PQclear(res);
+    }
+    
+    free(info);
+    return 0;
+}
+
+int db_leave_group(int user_id, int group_id) {
+    if (!conn) return -1;
+    
+    char user_id_str[32], group_id_str[32];
+    sprintf(user_id_str, "%d", user_id);
+    sprintf(group_id_str, "%d", group_id);
+    
+    const char *paramValues[2] = {group_id_str, user_id_str};
+    
+    // Delete from group_members
+    PGresult *res = PQexecParams(conn,
+        "DELETE FROM group_members WHERE group_id = $1 AND user_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "DELETE member failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    
+    // Delete permissions
+    res = PQexecParams(conn,
+        "DELETE FROM permissions WHERE group_id = $1 AND user_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    PQclear(res);
+    
+    return 0;
+}
+
+int db_remove_member(int group_id, int target_user_id) {
+    if (!conn) return -1;
+    
+    char group_id_str[32], target_user_id_str[32];
+    sprintf(group_id_str, "%d", group_id);
+    sprintf(target_user_id_str, "%d", target_user_id);
+    
+    const char *paramValues[2] = {group_id_str, target_user_id_str};
+    
+    // Delete from group_members
+    PGresult *res = PQexecParams(conn,
+        "DELETE FROM group_members WHERE group_id = $1 AND user_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "DELETE member failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    
+    // Delete permissions
+    res = PQexecParams(conn,
+        "DELETE FROM permissions WHERE group_id = $1 AND user_id = $2",
+        2, NULL, paramValues, NULL, NULL, 0);
+    PQclear(res);
+    
+    return 0;
+}

@@ -49,6 +49,18 @@ typedef struct {
     char created_at[64];
 } JoinRequestInfo;
 
+typedef struct {
+    int invitation_id;
+    int group_id;
+    char group_name[101];
+    int inviter_id;
+    char inviter_username[51];
+    char inviter_name[101];
+    int invitee_id;
+    char status[21];
+    char created_at[64];
+} InvitationInfo;
+
 int init_database();
 void cleanup_database();
 int db_create_user(const char *username, const char *password_hash, const char *email, const char *full_name);
@@ -71,5 +83,12 @@ int db_request_join_group(int user_id, int group_id);
 int db_get_join_requests(int group_id, JoinRequestInfo ***requests);
 int db_approve_join_request(int request_id, int reviewer_id, const char *action);
 JoinRequestInfo* db_get_join_request_by_id(int request_id);
+int db_invite_to_group(int inviter_id, int group_id, const char *invitee_username);
+int db_get_user_invitations(int user_id, InvitationInfo ***invitations);
+InvitationInfo* db_get_invitation_by_id(int invitation_id);
+int db_respond_invitation(int invitation_id, const char *action);
+int db_leave_group(int user_id, int group_id);
+int db_remove_member(int group_id, int target_user_id);
+UserInfo* db_get_user_by_username(const char *username);
 
 #endif
