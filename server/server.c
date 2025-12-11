@@ -135,7 +135,7 @@ int main() {
     
     // Bind
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("172.18.38.70");
+    server_addr.sin_addr.s_addr = inet_addr("172.18.36.255");
     server_addr.sin_port = htons(PORT);
     
     if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -151,7 +151,7 @@ int main() {
         return 1;
     }
     
-    printf("Server listening on 172.18.38.70:%d\n", PORT);
+    printf("Server listening on 172.18.36.255:%d\n", PORT);
     
     // Accept connections
     while (1) {
