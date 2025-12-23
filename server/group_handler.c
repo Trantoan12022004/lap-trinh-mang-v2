@@ -249,6 +249,32 @@ void handle_request_join_group(int sock, struct json_object *request) {
         return;
     }
     
+    // Tạo thông báo cho tất cả admin của group
+    int *admin_ids = NULL;
+    int admin_count = db_get_group_admin_ids(group_id, &admin_ids);
+    
+    char *group_name = db_get_group_name_by_id(group_id);
+    char *username = db_get_username_by_id(user->user_id);
+    char *full_name = user->full_name;
+    
+    char notif_title[255];
+    char notif_message[512];
+    snprintf(notif_title, sizeof(notif_title), "New Join Request");
+    snprintf(notif_message, sizeof(notif_message), 
+            "%s (%s) has requested to join '%s'",
+            full_name ? full_name : username,
+            username ? username : "Unknown",
+            group_name ? group_name : "the group");
+    
+    for (int i = 0; i < admin_count; i++) {
+        db_create_notification(admin_ids[i], "JOIN_REQUEST",
+                             notif_title, notif_message, "GROUP", group_id);
+    }
+    
+    if (admin_ids) free(admin_ids);
+    if (group_name) free(group_name);
+    if (username) free(username);
+    
     // Get current time
     time_t now = time(NULL);
     struct tm *tm_info = gmtime(&now);
@@ -383,6 +409,33 @@ void handle_approve_join_request(int sock, struct json_object *request) {
         free(req_info);
         return;
     }
+
+    // Tạo thông báo cho người gửi request
+    char *group_name = db_get_group_name_by_id(req_info->group_id);
+    char *admin_username = db_get_username_by_id(user->user_id);
+    
+    char notif_title[255];
+    char notif_message[512];
+    
+    if (strcmp(action, "approve") == 0) {
+        snprintf(notif_title, sizeof(notif_title), "Join Request Approved");
+        snprintf(notif_message, sizeof(notif_message), 
+                "Your request to join '%s' has been approved by %s", 
+                group_name ? group_name : "Unknown", 
+                admin_username ? admin_username : "Admin");
+    } else {
+        snprintf(notif_title, sizeof(notif_title), "Join Request Rejected");
+        snprintf(notif_message, sizeof(notif_message), 
+                "Your request to join '%s' has been rejected by %s", 
+                group_name ? group_name : "Unknown", 
+                admin_username ? admin_username : "Admin");
+    }
+    
+    db_create_notification(req_info->user_id, "JOIN_REQUEST_RESPONSE", 
+                          notif_title, notif_message, "GROUP", req_info->group_id);
+    
+    if (group_name) free(group_name);
+    if (admin_username) free(admin_username);
     
     // Get current time
     time_t now = time(NULL);
@@ -474,6 +527,24 @@ void handle_invite_to_group(int sock, struct json_object *request) {
         free(invitee);
         return;
     }
+    
+    // Tạo thông báo cho người được mời
+    char *group_name = db_get_group_name_by_id(group_id);
+    char *inviter_username = db_get_username_by_id(user->user_id);
+    
+    char notif_title[255];
+    char notif_message[512];
+    snprintf(notif_title, sizeof(notif_title), "Group Invitation");
+    snprintf(notif_message, sizeof(notif_message), 
+            "%s has invited you to join '%s'",
+            inviter_username ? inviter_username : "An admin",
+            group_name ? group_name : "a group");
+    
+    db_create_notification(invitee->user_id, "GROUP_INVITATION",
+                          notif_title, notif_message, "GROUP", group_id);
+    
+    if (group_name) free(group_name);
+    if (inviter_username) free(inviter_username);
     
     // Get current time
     time_t now = time(NULL);
@@ -602,6 +673,32 @@ void handle_respond_invitation(int sock, struct json_object *request) {
         free(inv_info);
         return;
     }
+
+    // Nếu accept -> Gửi thông báo cho admin
+    if (strcmp(action, "accept") == 0) {
+        int *admin_ids = NULL;
+        int admin_count = db_get_group_admin_ids(inv_info->group_id, &admin_ids);
+        
+        char *group_name = db_get_group_name_by_id(inv_info->group_id);
+        char *username = db_get_username_by_id(user->user_id);
+        
+        char notif_title[255];
+        char notif_message[512];
+        snprintf(notif_title, sizeof(notif_title), "Invitation Accepted");
+        snprintf(notif_message, sizeof(notif_message), 
+                "%s has accepted the invitation to join '%s'",
+                username ? username : "A user",
+                group_name ? group_name : "the group");
+        
+        for (int i = 0; i < admin_count; i++) {
+            db_create_notification(admin_ids[i], "INVITATION_ACCEPTED",
+                                 notif_title, notif_message, "GROUP", inv_info->group_id);
+        }
+        
+        if (admin_ids) free(admin_ids);
+        if (group_name) free(group_name);
+        if (username) free(username);
+    }
     
     // Get current time
     time_t now = time(NULL);
@@ -665,6 +762,30 @@ void handle_leave_group(int sock, struct json_object *request) {
         free(user);
         return;
     }
+
+    // Gửi thông báo cho admin
+    int *admin_ids = NULL;
+    int admin_count = db_get_group_admin_ids(group_id, &admin_ids);
+    
+    char *group_name = db_get_group_name_by_id(group_id);
+    char *username = db_get_username_by_id(user->user_id);
+    
+    char notif_title[255];
+    char notif_message[512];
+    snprintf(notif_title, sizeof(notif_title), "Member Left Group");
+    snprintf(notif_message, sizeof(notif_message), 
+            "%s has left the group '%s'",
+            username ? username : "A member",
+            group_name ? group_name : "Unknown");
+    
+    for (int i = 0; i < admin_count; i++) {
+        db_create_notification(admin_ids[i], "MEMBER_LEFT",
+                             notif_title, notif_message, "GROUP", group_id);
+    }
+    
+    if (admin_ids) free(admin_ids);
+    if (group_name) free(group_name);
+    if (username) free(username);
     
     // Get current time
     time_t now = time(NULL);
@@ -732,6 +853,24 @@ void handle_remove_member(int sock, struct json_object *request) {
         free(user);
         return;
     }
+
+    // Gửi thông báo cho người bị xóa
+    char *group_name = db_get_group_name_by_id(group_id);
+    char *admin_username = db_get_username_by_id(user->user_id);
+    
+    char notif_title[255];
+    char notif_message[512];
+    snprintf(notif_title, sizeof(notif_title), "Removed from Group");
+    snprintf(notif_message, sizeof(notif_message), 
+            "You have been removed from '%s' by %s",
+            group_name ? group_name : "the group",
+            admin_username ? admin_username : "an admin");
+    
+    db_create_notification(target_user_id, "REMOVED_FROM_GROUP",
+                          notif_title, notif_message, "GROUP", group_id);
+    
+    if (group_name) free(group_name);
+    if (admin_username) free(admin_username);
     
     // Get current time
     time_t now = time(NULL);
@@ -756,3 +895,243 @@ void handle_remove_member(int sock, struct json_object *request) {
     free(user);
     json_object_put(response);
 }
+// Thêm handler mới cho notifications
+void handle_get_notifications(int sock, struct json_object *request) {
+    struct json_object *data, *token_obj;
+    
+    if (!json_object_object_get_ex(request, "data", &data) ||
+        !json_object_object_get_ex(data, "session_token", &token_obj)) {
+        send_error_response(sock, STATUS_BAD_REQUEST, "ERROR_INVALID_REQUEST", "Missing required fields");
+        return;
+    }
+    
+    const char *token = json_object_get_string(token_obj);
+    
+    // Verify session
+    UserInfo *user = db_verify_session(token);
+    if (!user) {
+        send_error_response(sock, STATUS_UNAUTHORIZED, "ERROR_UNAUTHORIZED", "Invalid or expired session");
+        return;
+    }
+    
+    // Get notifications
+    NotificationInfo **notifications = NULL;
+    int count = db_get_user_notifications(user->user_id, &notifications);
+    
+    struct json_object *response = json_object_new_object();
+    json_object_object_add(response, "status", json_object_new_int(STATUS_OK));
+    json_object_object_add(response, "code", json_object_new_string("SUCCESS_GET_NOTIFICATIONS"));
+    json_object_object_add(response, "message", json_object_new_string("Notifications retrieved successfully"));
+    
+    struct json_object *payload = json_object_new_object();
+    struct json_object *notif_array = json_object_new_array();
+    
+    for (int i = 0; i < count; i++) {
+        struct json_object *notif_obj = json_object_new_object();
+        json_object_object_add(notif_obj, "notification_id", json_object_new_int(notifications[i]->notification_id));
+        json_object_object_add(notif_obj, "type", json_object_new_string(notifications[i]->type));
+        json_object_object_add(notif_obj, "title", json_object_new_string(notifications[i]->title));
+        json_object_object_add(notif_obj, "message", json_object_new_string(notifications[i]->message));
+        json_object_object_add(notif_obj, "related_type", json_object_new_string(notifications[i]->related_type));
+        json_object_object_add(notif_obj, "related_id", json_object_new_int(notifications[i]->related_id));
+        json_object_object_add(notif_obj, "is_read", json_object_new_boolean(notifications[i]->is_read));
+        json_object_object_add(notif_obj, "created_at", json_object_new_string(notifications[i]->created_at));
+        json_object_array_add(notif_array, notif_obj);
+        free(notifications[i]);
+    }
+    if (notifications) free(notifications);
+    
+    json_object_object_add(payload, "notifications", notif_array);
+    json_object_object_add(payload, "total_count", json_object_new_int(count));
+    json_object_object_add(response, "payload", payload);
+    
+    const char *json_str = json_object_to_json_string(response);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    free(user);
+    json_object_put(response);
+}
+
+void handle_mark_notification_read(int sock, struct json_object *request) {
+    struct json_object *data, *token_obj, *notif_id_obj;
+    
+    if (!json_object_object_get_ex(request, "data", &data) ||
+        !json_object_object_get_ex(data, "session_token", &token_obj) ||
+        !json_object_object_get_ex(data, "notification_id", &notif_id_obj)) {
+        send_error_response(sock, STATUS_BAD_REQUEST, "ERROR_INVALID_REQUEST", "Missing required fields");
+        return;
+    }
+    
+    const char *token = json_object_get_string(token_obj);
+    int notification_id = json_object_get_int(notif_id_obj);
+    
+    // Verify session
+    UserInfo *user = db_verify_session(token);
+    if (!user) {
+        send_error_response(sock, STATUS_UNAUTHORIZED, "ERROR_UNAUTHORIZED", "Invalid or expired session");
+        return;
+    }
+    
+    // Mark as read
+    if (db_mark_notification_read(user->user_id, notification_id) < 0) {
+        send_error_response(sock, STATUS_INTERNAL_ERROR, "ERROR_INTERNAL_SERVER", "Failed to mark as read");
+        free(user);
+        return;
+    }
+    
+    struct json_object *response = json_object_new_object();
+    json_object_object_add(response, "status", json_object_new_int(STATUS_OK));
+    json_object_object_add(response, "code", json_object_new_string("SUCCESS_MARK_READ"));
+    json_object_object_add(response, "message", json_object_new_string("Notification marked as read"));
+    
+    struct json_object *payload = json_object_new_object();
+    json_object_object_add(payload, "notification_id", json_object_new_int(notification_id));
+    json_object_object_add(response, "payload", payload);
+    
+    const char *json_str = json_object_to_json_string(response);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    free(user);
+    json_object_put(response);
+}
+
+void handle_mark_all_notifications_read(int sock, struct json_object *request) {
+    struct json_object *data, *token_obj;
+    
+    if (!json_object_object_get_ex(request, "data", &data) ||
+        !json_object_object_get_ex(data, "session_token", &token_obj)) {
+        send_error_response(sock, STATUS_BAD_REQUEST, "ERROR_INVALID_REQUEST", "Missing required fields");
+        return;
+    }
+    
+    const char *token = json_object_get_string(token_obj);
+    
+    // Verify session
+    UserInfo *user = db_verify_session(token);
+    if (!user) {
+        send_error_response(sock, STATUS_UNAUTHORIZED, "ERROR_UNAUTHORIZED", "Invalid or expired session");
+        return;
+    }
+    
+    // Mark all as read
+    if (db_mark_all_notifications_read(user->user_id) < 0) {
+        send_error_response(sock, STATUS_INTERNAL_ERROR, "ERROR_INTERNAL_SERVER", "Failed to mark all as read");
+        free(user);
+        return;
+    }
+    
+    struct json_object *response = json_object_new_object();
+    json_object_object_add(response, "status", json_object_new_int(STATUS_OK));
+    json_object_object_add(response, "code", json_object_new_string("SUCCESS_MARK_ALL_READ"));
+    json_object_object_add(response, "message", json_object_new_string("All notifications marked as read"));
+    
+    struct json_object *payload = json_object_new_object();
+    json_object_object_add(response, "payload", payload);
+    
+    const char *json_str = json_object_to_json_string(response);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    free(user);
+    json_object_put(response);
+}
+
+void handle_get_unread_count(int sock, struct json_object *request) {
+    struct json_object *data, *token_obj;
+    
+    if (!json_object_object_get_ex(request, "data", &data) ||
+        !json_object_object_get_ex(data, "session_token", &token_obj)) {
+        send_error_response(sock, STATUS_BAD_REQUEST, "ERROR_INVALID_REQUEST", "Missing required fields");
+        return;
+    }
+    
+    const char *token = json_object_get_string(token_obj);
+    
+    // Verify session
+    UserInfo *user = db_verify_session(token);
+    if (!user) {
+        send_error_response(sock, STATUS_UNAUTHORIZED, "ERROR_UNAUTHORIZED", "Invalid or expired session");
+        return;
+    }
+    
+    // Get unread count
+    int count = db_get_unread_notification_count(user->user_id);
+    
+    struct json_object *response = json_object_new_object();
+    json_object_object_add(response, "status", json_object_new_int(STATUS_OK));
+    json_object_object_add(response, "code", json_object_new_string("SUCCESS_GET_UNREAD_COUNT"));
+    json_object_object_add(response, "message", json_object_new_string("Unread count retrieved"));
+    
+    struct json_object *payload = json_object_new_object();
+    json_object_object_add(payload, "unread_count", json_object_new_int(count));
+    json_object_object_add(response, "payload", payload);
+    
+    const char *json_str = json_object_to_json_string(response);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    free(user);
+    json_object_put(response);
+}
+
+void handle_list_available_groups(int sock, struct json_object *request) {
+    struct json_object *data_obj, *field;
+    
+    if (!json_object_object_get_ex(request, "data", &data_obj)) {
+        send_error_response(sock, STATUS_BAD_REQUEST, "ERROR_INVALID_REQUEST", "Missing data field");
+        return;
+    }
+    
+    const char *session_token = NULL;
+    
+    if (json_object_object_get_ex(data_obj, "session_token", &field))
+        session_token = json_object_get_string(field);
+    
+    if (!session_token) {
+        send_error_response(sock, STATUS_BAD_REQUEST, "ERROR_INVALID_REQUEST", "Missing session_token");
+        return;
+    }
+    
+    // Verify session
+    UserInfo *user = db_verify_session(session_token);
+    if (!user) {
+        send_error_response(sock, STATUS_UNAUTHORIZED, "ERROR_UNAUTHORIZED", "Invalid session token or session expired");
+        return;
+    }
+    
+    // Get available groups
+    GroupInfo **groups = NULL;
+    int count = db_get_available_groups(user->user_id, &groups);
+    
+    // Send success response
+    struct json_object *response = json_object_new_object();
+    json_object_object_add(response, "status", json_object_new_int(STATUS_OK));
+    json_object_object_add(response, "code", json_object_new_string("SUCCESS_LIST_AVAILABLE_GROUPS"));
+    json_object_object_add(response, "message", json_object_new_string("Available groups retrieved successfully"));
+    
+    struct json_object *payload = json_object_new_object();
+    struct json_object *groups_array = json_object_new_array();
+    
+    for (int i = 0; i < count; i++) {
+        struct json_object *group_obj = json_object_new_object();
+        json_object_object_add(group_obj, "group_id", json_object_new_int(groups[i]->group_id));
+        json_object_object_add(group_obj, "group_name", json_object_new_string(groups[i]->group_name));
+        json_object_object_add(group_obj, "description", json_object_new_string(groups[i]->description));
+        json_object_object_add(group_obj, "member_count", json_object_new_int(groups[i]->member_count));
+        json_object_object_add(group_obj, "created_at", json_object_new_string(groups[i]->created_at));
+        json_object_array_add(groups_array, group_obj);
+        free(groups[i]);
+    }
+    if (groups) free(groups);
+    
+    json_object_object_add(payload, "groups", groups_array);
+    json_object_object_add(payload, "total_count", json_object_new_int(count));
+    json_object_object_add(response, "payload", payload);
+    
+    const char *json_str = json_object_to_json_string(response);
+    send(sock, json_str, strlen(json_str), 0);
+    
+    free(user);
+    json_object_put(response);
+}
+
+
+

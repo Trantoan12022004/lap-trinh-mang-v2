@@ -1186,3 +1186,286 @@ int db_move_directory(int directory_id, const char *destination_path, int *affec
     free(dir);
     return success;
 }
+
+
+char* db_get_group_name_by_id(int group_id) {
+    const char *query = "SELECT group_name FROM groups WHERE group_id = $1";
+    const char *params[1];
+    char group_id_str[32];
+    snprintf(group_id_str, sizeof(group_id_str), "%d", group_id);
+    params[0] = group_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    char *group_name = strdup(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    return group_name;
+}
+
+char* db_get_username_by_id(int user_id) {
+    const char *query = "SELECT username FROM users WHERE user_id = $1";
+    const char *params[1];
+    char user_id_str[32];
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    params[0] = user_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) == 0) {
+        PQclear(res);
+        return NULL;
+    }
+    
+    char *username = strdup(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    return username;
+}
+
+int db_get_group_admin_ids(int group_id, int **admin_ids) {
+    const char *query = 
+        "SELECT user_id FROM group_members "
+        "WHERE group_id = $1 AND role = 'admin' AND status = 'approved'";
+    
+    const char *params[1];
+    char group_id_str[32];
+    snprintf(group_id_str, sizeof(group_id_str), "%d", group_id);
+    params[0] = group_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        PQclear(res);
+        *admin_ids = NULL;
+        return 0;
+    }
+    
+    *admin_ids = malloc(sizeof(int) * count);
+    for (int i = 0; i < count; i++) {
+        (*admin_ids)[i] = atoi(PQgetvalue(res, i, 0));
+    }
+    
+    PQclear(res);
+    return count;
+}
+
+int db_create_notification(int user_id, const char *type, const char *title,
+                          const char *message, const char *related_type,
+                          int related_id) {
+    const char *query = 
+        "INSERT INTO notifications (user_id, type, title, message, related_type, related_id) "
+        "VALUES ($1, $2, $3, $4, $5, $6) RETURNING notification_id";
+    
+    const char *params[6];
+    char user_id_str[32], related_id_str[32];
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    snprintf(related_id_str, sizeof(related_id_str), "%d", related_id);
+    
+    params[0] = user_id_str;
+    params[1] = type;
+    params[2] = title;
+    params[3] = message;
+    params[4] = related_type;
+    params[5] = related_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 6, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "Create notification failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    int notification_id = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    return notification_id;
+}
+
+int db_get_user_notifications(int user_id, NotificationInfo ***notifications) {
+    const char *query = 
+        "SELECT notification_id, user_id, type, title, message, "
+        "related_type, related_id, is_read, created_at "
+        "FROM notifications "
+        "WHERE user_id = $1 "
+        "ORDER BY created_at DESC "
+        "LIMIT 50";
+    
+    const char *params[1];
+    char user_id_str[32];
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    params[0] = user_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "Get notifications failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        PQclear(res);
+        *notifications = NULL;
+        return 0;
+    }
+    
+    *notifications = malloc(sizeof(NotificationInfo*) * count);
+    
+    for (int i = 0; i < count; i++) {
+        NotificationInfo *notif = malloc(sizeof(NotificationInfo));
+        
+        notif->notification_id = atoi(PQgetvalue(res, i, 0));
+        notif->user_id = atoi(PQgetvalue(res, i, 1));
+        strncpy(notif->type, PQgetvalue(res, i, 2), sizeof(notif->type) - 1);
+        strncpy(notif->title, PQgetvalue(res, i, 3), sizeof(notif->title) - 1);
+        strncpy(notif->message, PQgetvalue(res, i, 4), sizeof(notif->message) - 1);
+        strncpy(notif->related_type, PQgetvalue(res, i, 5), sizeof(notif->related_type) - 1);
+        notif->related_id = atoi(PQgetvalue(res, i, 6));
+        notif->is_read = strcmp(PQgetvalue(res, i, 7), "t") == 0 ? 1 : 0;
+        strncpy(notif->created_at, PQgetvalue(res, i, 8), sizeof(notif->created_at) - 1);
+        
+        (*notifications)[i] = notif;
+    }
+    
+    PQclear(res);
+    return count;
+}
+
+int db_mark_notification_read(int user_id, int notification_id) {
+    const char *query = 
+        "UPDATE notifications "
+        "SET is_read = TRUE, read_at = CURRENT_TIMESTAMP "
+        "WHERE notification_id = $1 AND user_id = $2";
+    
+    const char *params[2];
+    char notification_id_str[32], user_id_str[32];
+    snprintf(notification_id_str, sizeof(notification_id_str), "%d", notification_id);
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    params[0] = notification_id_str;
+    params[1] = user_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 2, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "Mark notification read failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    PQclear(res);
+    return 0;
+}
+
+int db_mark_all_notifications_read(int user_id) {
+    const char *query = 
+        "UPDATE notifications "
+        "SET is_read = TRUE, read_at = CURRENT_TIMESTAMP "
+        "WHERE user_id = $1 AND is_read = FALSE";
+    
+    const char *params[1];
+    char user_id_str[32];
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    params[0] = user_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        PQclear(res);
+        return -1;
+    }
+    
+    PQclear(res);
+    return 0;
+}
+
+int db_get_unread_notification_count(int user_id) {
+    const char *query = 
+        "SELECT COUNT(*) FROM notifications "
+        "WHERE user_id = $1 AND is_read = FALSE";
+    
+    const char *params[1];
+    char user_id_str[32];
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    params[0] = user_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, params, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return 0;
+    }
+    
+    int count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    return count;
+}
+
+int db_get_available_groups(int user_id, GroupInfo ***groups) {
+    const char *query = 
+        "SELECT g.group_id, g.group_name, g.description, g.created_at, "
+        "       (SELECT COUNT(*) FROM group_members WHERE group_id = g.group_id AND status = 'active') as member_count "
+        "FROM groups g "
+        "WHERE g.group_id NOT IN ( "
+        "    SELECT group_id FROM group_members "
+        "    WHERE user_id = $1 "
+        "    AND status IN ('active', 'pending') "
+        ") "
+        "AND g.group_id NOT IN ( "
+        "    SELECT group_id FROM join_requests "
+        "    WHERE user_id = $1 "
+        "    AND status = 'pending' "
+        ") "
+        "AND g.group_id NOT IN ( "
+        "    SELECT group_id FROM group_invitations "
+        "    WHERE invitee_id = $1 "
+        "    AND status = 'pending' "
+        ") "
+        "ORDER BY g.created_at DESC";
+    
+    const char *paramValues[1];
+    char user_id_str[20];
+    snprintf(user_id_str, sizeof(user_id_str), "%d", user_id);
+    paramValues[0] = user_id_str;
+    
+    PGresult *res = PQexecParams(conn, query, 1, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "Get available groups failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    
+    int count = PQntuples(res);
+    if (count == 0) {
+        *groups = NULL;
+        PQclear(res);
+        return 0;
+    }
+    
+    *groups = malloc(sizeof(GroupInfo*) * count);
+    
+    for (int i = 0; i < count; i++) {
+        (*groups)[i] = malloc(sizeof(GroupInfo));
+        (*groups)[i]->group_id = atoi(PQgetvalue(res, i, 0));
+        strncpy((*groups)[i]->group_name, PQgetvalue(res, i, 1), sizeof((*groups)[i]->group_name) - 1);
+        strncpy((*groups)[i]->description, PQgetvalue(res, i, 2), sizeof((*groups)[i]->description) - 1);
+        strncpy((*groups)[i]->created_at, PQgetvalue(res, i, 3), sizeof((*groups)[i]->created_at) - 1);
+        (*groups)[i]->member_count = atoi(PQgetvalue(res, i, 4));
+        strcpy((*groups)[i]->role, ""); // Not a member
+    }
+    
+    PQclear(res);
+    return count;
+}
+

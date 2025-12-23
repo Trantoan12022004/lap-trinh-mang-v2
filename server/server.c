@@ -10,7 +10,6 @@
 #include "auth_handler.h"
 #include "permission_handler.h"
 #include "group_handler.h"
-#include "file_handler.h"
 #include "database.h"
 
 typedef struct {
@@ -88,17 +87,16 @@ void *handle_client(void *arg) {
             handle_leave_group(client_sock, request);
         } else if (strcmp(command, "REMOVE_MEMBER") == 0) {
             handle_remove_member(client_sock, request);
-        } else if (strcmp(command, "CREATE_DIRECTORY") == 0) {
-            handle_create_directory(client_sock, request);
-        } else if (strcmp(command, "RENAME_DIRECTORY") == 0) {
-            handle_rename_directory(client_sock, request);
-        } else if (strcmp(command, "DELETE_DIRECTORY") == 0) {
-            handle_delete_directory(client_sock, request);
-        } else if (strcmp(command, "COPY_DIRECTORY") == 0) {
-            handle_copy_directory(client_sock, request);
-        } else if (strcmp(command, "MOVE_DIRECTORY") == 0) {
-            handle_move_directory(client_sock, request);
-        } else {
+        } else if (strcmp(command, "GET_NOTIFICATIONS") == 0) {
+            handle_get_notifications(client_sock, request);
+        } else if (strcmp(command, "MARK_NOTIFICATION_READ") == 0) {
+            handle_mark_notification_read(client_sock, request);
+        } else if (strcmp(command, "MARK_ALL_NOTIFICATIONS_READ") == 0) {
+            handle_mark_all_notifications_read(client_sock, request);
+        } else if (strcmp(command, "GET_UNREAD_COUNT") == 0) {
+            handle_get_unread_count(client_sock, request);
+        } 
+        else {
             send_error_response(client_sock, STATUS_BAD_REQUEST, "ERROR_INVALID_COMMAND", "Unknown command");
         }
         
@@ -135,7 +133,7 @@ int main() {
     
     // Bind
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("172.18.36.255");
+    server_addr.sin_addr.s_addr = inet_addr("172.18.38.233");
     server_addr.sin_port = htons(PORT);
     
     if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -151,7 +149,7 @@ int main() {
         return 1;
     }
     
-    printf("Server listening on 172.18.36.255:%d\n", PORT);
+    printf("Server listening on 172.18.38.233:%d\n", PORT);
     
     // Accept connections
     while (1) {

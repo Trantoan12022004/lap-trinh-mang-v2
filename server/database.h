@@ -70,6 +70,31 @@ typedef struct {
     char created_at[64];
 } DirectoryInfo;
 
+typedef struct {
+    int file_id;
+    int group_id;
+    char file_name[256];
+    char file_path[512];
+    long long file_size;
+    char file_type[51];
+    int uploaded_by;
+    char uploaded_at[64];
+    char parent_directory[512];
+} FileInfo;
+
+// Notification types
+typedef struct {
+    int notification_id;
+    int user_id;
+    char type[50];
+    char title[255];
+    char message[512];
+    char related_type[50];
+    int related_id;
+    int is_read;
+    char created_at[64];
+} NotificationInfo;
+
 int init_database();
 void cleanup_database();
 int db_create_user(const char *username, const char *password_hash, const char *email, const char *full_name);
@@ -106,4 +131,20 @@ int db_delete_directory(int directory_id, int *deleted_files, int *deleted_subdi
 int db_copy_directory(int directory_id, const char *destination_path, int user_id);
 int db_move_directory(int directory_id, const char *destination_path, int *affected_files, int *affected_subdirs);
 
+
+// Notification functions
+int db_create_notification(int user_id, const char *type, const char *title, 
+                          const char *message, const char *related_type, 
+                          int related_id);
+int db_get_user_notifications(int user_id, NotificationInfo ***notifications);
+int db_mark_notification_read(int user_id, int notification_id);
+int db_mark_all_notifications_read(int user_id);
+int db_get_unread_notification_count(int user_id);
+
+// Helper functions
+char* db_get_group_name_by_id(int group_id);
+char* db_get_username_by_id(int user_id);
+int db_get_group_admin_ids(int group_id, int **admin_ids);
+
+int db_get_available_groups(int user_id, GroupInfo ***groups);
 #endif
